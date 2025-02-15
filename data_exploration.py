@@ -1,19 +1,11 @@
 ######### SETUP ########################################################################################################
 # Import libraries
 import seaborn as sns
-import numpy as np
 import matplotlib.pyplot as plt
 import warnings
 from sklearn.model_selection import train_test_split
-from sklearn import metrics
-from sklearn.metrics import mean_squared_error
-import xgboost as xgb
 import pandas as pd
-from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
-from sklearn.preprocessing import StandardScaler
 from pathlib import Path
-import plotly.express as px
-#todo make sure all libraries are used above
 
 # Ignore warnings
 warnings.filterwarnings("ignore")
@@ -61,16 +53,16 @@ if Print_Prep:
 
     for variable in remaining_variables:
         print(variable, df[variable].unique())
-        # self_employed/family_history/treatment(prediction variable) looks good; has two categories (Yes or No). But we will need to remove NaN for self-employed todo
-        # work_interfere has missing values, and ordinal categories ['Often' 'Rarely' 'Never' 'Sometimes' nan] todo
-        # no_employees is also ordinal categories ['6-25' 'More than 1000' '26-100' '100-500' '1-5' '500-1000'] todo
+        # self_employed/family_history/treatment(prediction variable) looks good; has two categories (Yes or No). But we will need to remove NaN for self-employed
+        # work_interfere has missing values, and ordinal categories ['Often' 'Rarely' 'Never' 'Sometimes' nan]
+        # no_employees is also ordinal categories ['6-25' 'More than 1000' '26-100' '100-500' '1-5' '500-1000']
         # remote_work/tech_company is fine
         # benefits is fine ['Yes' "Don't know" 'No']
         # care_options is fine ['Not sure' 'No' 'Yes']
         # wellness_program is fine ['No' "Don't know" 'Yes']
         # seek_help is fine ['Yes' "Don't know" 'No']
         # anonymity is fine ['Yes' "Don't know" 'No']
-        # leave is ordinal categories (+ Don't know) ['Somewhat easy' "Don't know" 'Somewhat difficult' 'Very difficult' 'Very easy'] todo
+        # leave is ordinal categories (+ Don't know) ['Somewhat easy' "Don't know" 'Somewhat difficult' 'Very difficult' 'Very easy']
         # mental_health_consequence is fine ['No' 'Maybe' 'Yes']
         # phys_health_consequence is fine ['No' 'Yes' 'Maybe']
         # coworkers is fine ['Some of them' 'No' 'Yes']
@@ -136,26 +128,14 @@ if Print_Prep:
     print(df['gender'].value_counts())
 
 ### EXPLORATORY DATA ANALYSIS ##########################################################################################
-Print_EDA = False # Can switch this off for later analysis to avoid cluttering the terminal
-
-# TODO these are skipped in the example code. Figure out why! Think parts are done later but yea
-# # Extract feature and target arrays
-# X, y = diamonds.drop('price', axis=1), diamonds[['price']]
-#
-# # Extract categories and convert to an integer (required for newer XGBoost versions)
-# cats = X.select_dtypes(exclude=np.number).columns.tolist()
-# for col in cats:
-#     X[col] = X[col].astype('category')
-#     X[col] = X[col].cat.codes  # Converts the category to its integer code
+Print_EDA = True # Can switch this off for later analysis to avoid cluttering the terminal
 
 # First split the model so we don't perform EDA on the test data
 # Split the data into train/test
 train, test = train_test_split(df, test_size=0.2, stratify=df['treatment'], random_state=42)
-# todo: I did it a bit differently where I split X and Y as well as train and test. Make sure all following code applies to all sets where necessary. eg data prep which isn't done yet!
-# todo: now changed bc I want to colour by predictor
 
 # Set colour palette for graphs coloured by treatment column
-colour_palette = {"Yes": "#ff0a47", "No": "#00aaff"} # todo improve colours
+colour_palette = {"Yes": "#ff0357", "No": "#006aff"}
 if Print_EDA:
     print(f'Train data dimensions: {train.shape}')
     print(f'Test data dimensions: {test.shape}')
@@ -166,7 +146,6 @@ if Print_EDA:
         # 'coworkers', 'supervisor', 'mental_health_interview', 'phys_health_interview', 'mental_vs_physical', 'obs_consequence']
 
     # 1. Start with our target variable: treatment
-    #todo check all these graph styles are consistent
     sns.set_style("white")
     treatment_percent = round(train['treatment'].value_counts(normalize = True).reset_index(name = 'percentage'),3)
     ax = sns.barplot(x = 'treatment', y = 'percentage', data = treatment_percent, palette=colour_palette, alpha=0.7)
@@ -174,7 +153,7 @@ if Print_EDA:
     for p in ax.patches:
         width = p.get_width()
         height = p.get_height()
-        x, y = p.get_xy() #todo changed the labels so chekc
+        x, y = p.get_xy()
         ax.annotate(f'{height:.1%}', (x + p.get_width() / 2, height + 0.7), ha='center', fontweight='bold')
 
     # Plot settings
@@ -184,7 +163,7 @@ if Print_EDA:
     plt.show()
     # Result: nearly 50/50 sought vs didn't seek treatment
         # Important that we find all the true positives as we want to be able to help everyone - consider this when building the model
-        # No class imbalance so don't need to resample TODO did i do this somewhere? I thought I did but can't remember
+        # No class imbalance so don't need to resample
 
     # 2. Age column
     # Plot basics
@@ -215,7 +194,7 @@ if Print_EDA:
         height = p.get_height()
         if height > 0:
             x, y = p.get_xy()
-            ax.annotate(f'{height:.1f}%', (x + p.get_width() / 2, height + 0.7), ha='center', fontweight='bold')
+            ax.annotate(f'{height:.1f}%', (x + p.get_width() / 2, height + 0.6), ha='center', fontweight='bold')
 
     # Plot settings
     ax.set_xlabel("Gender of participants", fontsize=12)
@@ -224,7 +203,6 @@ if Print_EDA:
     plt.show()
 
     # Results: There is a notable class imbalance, so we need to be wary of saying that men are more prone to mental illness.
-        # TODO not really sure what to do with this. Is it a feature?
 
     # 4. Self-employed
     # Calculate percentage data
@@ -234,7 +212,7 @@ if Print_EDA:
     # Plot the histogram
     sns.set_style("white")
     ax = sns.histplot(x='self_employed', data=self_employed_treatment_percent, hue='treatment',
-                      palette=colour_palette, multiple="dodge", alpha=0.6, weights='percentage')
+                      palette=colour_palette, multiple="dodge", alpha=0.7, weights='percentage')
 
     # Annotate bars with the percentages (determined from bar height)
     for p in ax.patches:
@@ -280,7 +258,7 @@ if Print_EDA:
     # Results: Those with a family history are more likely to seek treatment - making f_h an important feature
 
     # 6. Does your mental health condition (if present) interfere with your work?
-    # Order categories by frequency #todo perhaps could combine this with... one hot encoding? which i might do later
+    # Order categories by frequency
     category_order = ['Never', 'Rarely', 'Sometimes', 'Often']
     train['work_interfere'] = pd.Categorical(train['work_interfere'], categories=category_order, ordered=True)
 
@@ -308,10 +286,9 @@ if Print_EDA:
     plt.show()
 
     # Results: Vast majority of respondents report work interference. Those who have sought treatment skew more towards the higher frequency than those untreated
-        # TODO should we omit this? Idk it's an odd variable to predict having sought treatment anyway. But this group have already sought treatment so... it feels odd to me
 
     # 7. Number of employees at the company
-    # Order categories by frequency #todo perhaps could combine this with... one hot encoding? which i might do later
+    # Order categories by frequency
     category_order = ['1-5', '6-25', '26-100', '100-500', '500-1000', 'More than 1000']
     train['no_employees'] = pd.Categorical(train['no_employees'], categories=category_order, ordered=True)
 
@@ -349,15 +326,20 @@ if Print_EDA:
     # Plot the histogram
     sns.set_style("white")
     ax = sns.histplot(x='remote_work', data=remote_work_treatment_percent, hue='treatment',
-                      palette=colour_palette, alpha=0.7, weights='percentage')
+                      palette=colour_palette, alpha=0.7, weights='percentage', multiple="dodge")
 
-    # Removed annotations due to overlap - could be re-added and adjusted
+    # Annotate bars with the percentages (determined from bar height)
+    for p in ax.patches:
+        width = p.get_width()
+        height = p.get_height()
+        if height > 0:
+            x, y = p.get_xy()
+            ax.annotate(f'{height:.1f}%', (x + p.get_width() / 2, height + 0.2), ha='center', fontweight='bold')
 
     # Plot settings
     ax.set_xlabel("(Majority) Remote worker", fontsize=12)
     ax.set_ylabel("Percentage of study group", fontsize=12)
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
-    plt.title('Do oyu work remotely more than 50% of the time?', fontsize=14, fontweight='bold')
+    plt.title('Do you work remotely more than 50% of the time?', fontsize=14, fontweight='bold')
     plt.show()
 
     # Result: Very similar ratios between treatment classes.
@@ -370,7 +352,7 @@ if Print_EDA:
     # Plot the histogram
     sns.set_style("white")
     ax = sns.histplot(x='tech_company', data=tech_company_treatment_percent, hue='treatment',
-                      palette=colour_palette, alpha=0.7, weights='percentage')
+                      palette=colour_palette, alpha=0.7, weights='percentage', multiple="dodge")
 
     # Annotate bars with the percentages (determined from bar height)
     for p in ax.patches:
@@ -383,7 +365,6 @@ if Print_EDA:
     # Plot settings
     ax.set_xlabel("Tech company", fontsize=12)
     ax.set_ylabel("Percentage of study group", fontsize=12)
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
     plt.title('Do you work at a tech company?', fontsize=14, fontweight='bold')
     plt.show()
 
@@ -398,7 +379,7 @@ if Print_EDA:
     # Plot the histogram
     sns.set_style("white")
     ax = sns.histplot(x='benefits', data=benefits_treatment_percent, hue='treatment',
-                      palette=colour_palette, alpha=0.7, weights='percentage')
+                      palette=colour_palette, alpha=0.7, weights='percentage', multiple="dodge")
 
     # Annotate bars with the percentages (determined from bar height)
     for p in ax.patches:
@@ -407,12 +388,11 @@ if Print_EDA:
         if height > 0:
             x, y = p.get_xy()
             ax.annotate(f'{height:.1f}%', (x + p.get_width() / 2, height + 0.2), ha='center', fontweight='bold')
-#todo this and others i think say overlapping distribution but either aren't or shouldn't be! so check them all at the end
+
     # Plot settings
     ax.set_xlabel("Benefits", fontsize=12)
     ax.set_ylabel("Percentage of study group", fontsize=12)
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
-    plt.title('Does your employer offer benefits?\n Overlapping distribution', fontsize=14, fontweight='bold')
+    plt.title('Does your employer offer benefits?', fontsize=14, fontweight='bold')
     plt.show()
 
     # Results: 'Yes' has far more employees seeking treatment, 'No' about even, and don't know has the lowest ratio of those seeking treatment
@@ -427,7 +407,7 @@ if Print_EDA:
     # Plot the histogram
     sns.set_style("white")
     ax = sns.histplot(x='care_options', data=care_options_treatment_percent, hue='treatment',
-                      palette=colour_palette, alpha=0.7, weights='percentage')
+                      palette=colour_palette, alpha=0.7, weights='percentage', multiple="dodge")
 
     # Annotate bars with the percentages (determined from bar height)
     for p in ax.patches:
@@ -440,8 +420,7 @@ if Print_EDA:
     # Plot settings
     ax.set_xlabel("Care options", fontsize=12)
     ax.set_ylabel("Percentage of study group", fontsize=12)
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
-    plt.title('Do you know about the mental health care options your employer provides?\n Overlapping distribution', fontsize=14, fontweight='bold')
+    plt.title('Do you know about the mental health care options your employer provides?', fontsize=14, fontweight='bold')
     plt.show()
 
     # Results: 'Yes' were most likely to seek treatment with the majority doing so, and vice versa for 'No'. 'Not sure' mostly haven't sought
@@ -472,7 +451,6 @@ if Print_EDA:
     # Plot settings
     ax.set_xlabel("Wellness program", fontsize=12)
     ax.set_ylabel("Percentage of study group", fontsize=12)
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
     plt.title('Has your employer ever discussed mental health as part of an employee wellness program?', fontsize=14, fontweight='bold')
     plt.show()
 
@@ -502,7 +480,6 @@ if Print_EDA:
     # Plot settings
     ax.set_xlabel("Resources to seek help", fontsize=12)
     ax.set_ylabel("Percentage of study group", fontsize=12)
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
     plt.title('Does your employer provide resources to learn more about mental health issues and how to seek help?', fontsize=14,
               fontweight='bold')
     plt.show()
@@ -561,8 +538,8 @@ if Print_EDA:
     ax.set_xlabel("Leave", fontsize=12)
     ax.set_ylabel("Percentage of study group", fontsize=12)
     plt.xticks()
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
-    plt.title('How easy is it for you to take medical leave for a mental health condition?',
+    ax.set_xticklabels(ax.get_xticklabels(), fontsize=9)
+    plt.title('How easy is it for you to take medical leave for a mental health condition?\nOverlapping distribution',
               fontsize=14,
               fontweight='bold')
     plt.show()
@@ -583,7 +560,7 @@ if Print_EDA:
     # Plot the histogram
     sns.set_style("white")
     ax = sns.histplot(x='mental_health_consequence', data=mental_health_consequence_treatment_percent, hue='treatment',
-                      palette=colour_palette, alpha=0.7, weights='percentage')
+                      palette=colour_palette, alpha=0.7, weights='percentage', multiple="dodge")
 
     # Annotate bars with the percentages (determined from bar height)
     for p in ax.patches:
@@ -596,8 +573,6 @@ if Print_EDA:
     # Plot settings
     ax.set_xlabel("Consequences", fontsize=12)
     ax.set_ylabel("Percentage of study group", fontsize=12)
-    plt.xticks()
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
     plt.title('Do you think that discussing a mental health issue with your employer would have negative consequences?',
               fontsize=14,
               fontweight='bold')
@@ -619,7 +594,7 @@ if Print_EDA:
     # Plot the histogram
     sns.set_style("white")
     ax = sns.histplot(x='phys_health_consequence', data=phys_health_consequence_treatment_percent, hue='treatment',
-                      palette=colour_palette, alpha=0.7, weights='percentage')
+                      palette=colour_palette, alpha=0.7, weights='percentage', multiple="dodge")
 
     # Annotate bars with the percentages (determined from bar height)
     for p in ax.patches:
@@ -654,7 +629,7 @@ if Print_EDA:
     # Plot the histogram
     sns.set_style("white")
     ax = sns.histplot(x='coworkers', data=coworkers_treatment_percent, hue='treatment',
-                      palette=colour_palette, alpha=0.7, weights='percentage')
+                      palette=colour_palette, alpha=0.7, weights='percentage', multiple="dodge")
 
     # Annotate bars with the percentages (determined from bar height)
     for p in ax.patches:
@@ -688,7 +663,7 @@ if Print_EDA:
     # Plot the histogram
     sns.set_style("white")
     ax = sns.histplot(x='supervisor', data=supervisor_treatment_percent, hue='treatment',
-                      palette=colour_palette, alpha=0.7, weights='percentage')
+                      palette=colour_palette, alpha=0.7, weights='percentage', multiple="dodge")
 
     # Annotate bars with the percentages (determined from bar height)
     for p in ax.patches:
@@ -721,9 +696,15 @@ if Print_EDA:
     # Plot the histogram
     sns.set_style("white")
     ax = sns.histplot(x='mental_health_interview', data=mental_health_interview_treatment_percent, hue='treatment',
-                      palette=colour_palette, alpha=0.7, weights='percentage')
+                      palette=colour_palette, alpha=0.7, weights='percentage', multiple="dodge")
 
-    # Removed annotations due to overlap - could be re-added and adjusted
+    # Annotate bars with the percentages (determined from bar height)
+    for p in ax.patches:
+        width = p.get_width()
+        height = p.get_height()
+        if height > 0:
+            x, y = p.get_xy()
+            ax.annotate(f'{height:.1f}%', (x + p.get_width() / 2, height + 0.2), ha='center', fontweight='bold')
 
     # Plot settings
     ax.set_xlabel("Mention mental health in interview", fontsize=12)
@@ -748,9 +729,15 @@ if Print_EDA:
     # Plot the histogram
     sns.set_style("white")
     ax = sns.histplot(x='phys_health_interview', data=phys_health_interview_treatment_percent, hue='treatment',
-                      palette=colour_palette, alpha=0.7, weights='percentage')
+                      palette=colour_palette, alpha=0.7, weights='percentage', multiple="dodge")
 
-    # Removed annotations due to overlap - could be re-added and adjusted
+    # Annotate bars with the percentages (determined from bar height)
+    for p in ax.patches:
+        width = p.get_width()
+        height = p.get_height()
+        if height > 0:
+            x, y = p.get_xy()
+            ax.annotate(f'{height:.1f}%', (x + p.get_width() / 2, height + 0.2), ha='center', fontweight='bold')
 
     # Plot settings
     ax.set_xlabel("Mention physical health in interview", fontsize=12)
@@ -789,8 +776,7 @@ if Print_EDA:
     ax.set_xlabel("Takes mental health seriously", fontsize=12)
     ax.set_ylabel("Percentage of study group", fontsize=12)
     plt.title('Do you feel that your employer takes mental health as seriously as physical health?',
-              fontsize=14,
-              fontweight='bold')
+              fontsize=14, fontweight='bold')
     plt.show()
 
     # Results: Same proportion of treated and untreated for yes, but those that say no are more likely to be those seeking treatment
@@ -824,21 +810,4 @@ if Print_EDA:
     plt.show()
 
 # Results: Those who seek treatment are more likely to say yes, but vast majority is no
-
-
-
-
-
-
-# continue with eda, checking tutorials. haven't done the conclusion part for this yet
-
-
-
-
-#todo remove self employed work interfere missing values
-
-# todo there's also a few ordinal categories which i think should be encoded numerically (see todos above)
-
-
-#feature importance is probably the key here - we want to focus on what allows employees to be able to seek treatment, not whether they do
 
