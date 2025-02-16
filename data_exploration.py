@@ -18,7 +18,7 @@ df = pd.read_csv(csv_path)
 pd.set_option('display.max_columns', None)
 
 ### DATA PREPARATION ##########################################################################################
-Print_Prep = False # Can switch this off for later analysis to avoid cluttering the terminal
+Print_Prep = True # Can switch this off for later analysis to avoid cluttering the terminal
 
 if Print_Prep:
     print("Data shape:", df.shape, "\n")
@@ -62,7 +62,7 @@ if Print_Prep:
         # wellness_program is fine ['No' "Don't know" 'Yes']
         # seek_help is fine ['Yes' "Don't know" 'No']
         # anonymity is fine ['Yes' "Don't know" 'No']
-        # leave is ordinal categories (+ Don't know) ['Somewhat easy' "Don't know" 'Somewhat difficult' 'Very difficult' 'Very easy']
+        # leave is ['Don't know' 'Somewhat easy' "Don't know" 'Somewhat difficult' 'Very difficult' 'Very easy']
         # mental_health_consequence is fine ['No' 'Maybe' 'Yes']
         # phys_health_consequence is fine ['No' 'Yes' 'Maybe']
         # coworkers is fine ['Some of them' 'No' 'Yes']
@@ -70,7 +70,7 @@ if Print_Prep:
         # mental_health_interview is fine ['No' 'Yes' 'Maybe']
         # phys_health_interview is fine ['Maybe' 'No' 'Yes']
         # mental_vs_physical is fine ['Yes' "Don't know" 'No']
-        # obs_consequence is Y/N no missing values
+        # obs_consequence is Y/N no missing values ['Yes 'No']
 
 else: # Do the bits of code we want to keep for future analysis only; no EDA
     # Convert columns to lower case for easier handling
@@ -128,7 +128,7 @@ if Print_Prep:
     print(df['gender'].value_counts())
 
 ### EXPLORATORY DATA ANALYSIS ##########################################################################################
-Print_EDA = True # Can switch this off for later analysis to avoid cluttering the terminal
+Print_EDA = True # Can switch this off to just look at data prep
 
 # First split the model so we don't perform EDA on the test data
 # Split the data into train/test
@@ -282,10 +282,12 @@ if Print_EDA:
     # Plot settings
     ax.set_xlabel("Work interference", fontsize=12)
     ax.set_ylabel("Percentage of study group", fontsize=12)
-    plt.title('If you have a mental health condition, does it interfere with your work?\n Overlapping distribution', fontsize=14, fontweight='bold')
+    plt.title('If you have a mental health condition, does it interfere with your work?\n Overlapping distribution',
+              fontsize=14, fontweight='bold')
     plt.show()
 
-    # Results: Vast majority of respondents report work interference. Those who have sought treatment skew more towards the higher frequency than those untreated
+    # Results: Vast majority of respondents report work interference. Those who have sought treatment skew more towards
+        # the higher frequency than those untreated - increasing ratio of treatment in higher frequencies.
 
     # 7. Number of employees at the company
     # Order categories by frequency
@@ -342,7 +344,8 @@ if Print_EDA:
     plt.title('Do you work remotely more than 50% of the time?', fontsize=14, fontweight='bold')
     plt.show()
 
-    # Result: Very similar ratios between treatment classes.
+    # Result: Very similar ratios between treatment classes; seems remote work doesn't affect mental health or at least
+        # there are other confounding factors
 
     # 9. Do you work at a tech company?
     # Calculate percentage data
@@ -368,7 +371,8 @@ if Print_EDA:
     plt.title('Do you work at a tech company?', fontsize=14, fontweight='bold')
     plt.show()
 
-    # Results: Very similar ratios between treatment classes.
+    # Results: Very similar ratios between treatment classes - can't comment without statistical significance but can largely
+        # say that tech field doesn't affect proportion seeking treatment
 
 
     # 10. Does your employer provide mental health benefits?
@@ -395,8 +399,9 @@ if Print_EDA:
     plt.title('Does your employer offer benefits?', fontsize=14, fontweight='bold')
     plt.show()
 
-    # Results: 'Yes' has far more employees seeking treatment, 'No' about even, and don't know has the lowest ratio of those seeking treatment
+    # Results: 'Yes' has far more employees seeking treatment, 'No' about even, and 'don't know' has the lowest ratio of those seeking treatment
         # Perhaps those who don't yet know about MH facilities provided by their employer are least likely to also seek independent care
+        # which might explain why 'No' has a higher ratio. When care is offered, we see that most employees have sought treatment
 
     # 11. Do you know the options for mental health care your employer provides?
     # Calculate percentage data
@@ -425,7 +430,8 @@ if Print_EDA:
 
     # Results: 'Yes' were most likely to seek treatment with the majority doing so, and vice versa for 'No'. 'Not sure' mostly haven't sought
         # out treatment, although with a more even ratio than 'No'
-        # (Also true for previous) Those seeking treatment might be more likely to investigate health care options - a good metric of inidivudals who should be offered care.
+        # (Also true for previous) Those seeking treatment might be more likely to investigate health care options - a good metric of
+        # inidivudals who should be offered care.
         # Alternatively, being aware of these options may increase tendency to use them
         # Another insight is that for both this and the benefits, it seems like awareness of options could be increased by the companies
 
