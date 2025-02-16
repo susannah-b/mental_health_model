@@ -3,7 +3,6 @@
 import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
-import warnings
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
 from sklearn.metrics import mean_squared_error
@@ -21,36 +20,8 @@ import statsmodels.api as sm
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.ensemble import RandomForestClassifier
-
-
+import miceforest as mf
 #todo make sure all libraries are used above
-
-# self_employed/family_history/treatment(prediction variable) looks good; has two categories (Yes or No). But we will need to remove NaN for self-employed todo
-# work_interfere has missing values, and ordinal categories ['Often' 'Rarely' 'Never' 'Sometimes' nan] todo
-# no_employees is also ordinal categories ['6-25' 'More than 1000' '26-100' '100-500' '1-5' '500-1000'] todo
-# leave is ordinal categories (+ Don't know) ['Somewhat easy' "Don't know" 'Somewhat difficult' 'Very difficult' 'Very easy'] todo
-# todo do we ignore gender? or it still counts. maybe test with and without
-
-# TODO these are skipped in the example code. Figure out if they're replaced. Not splitting xy was useful for EDA tho. Prob coulda been categories for EDA tho
-# # Extract feature and target arrays
-# X, y = diamonds.drop('price', axis=1), diamonds[['price']]
-#
-# # Extract categories and convert to an integer (required for newer XGBoost versions)
-# cats = X.select_dtypes(exclude=np.number).columns.tolist()
-# for col in cats:
-#     X[col] = X[col].astype('category')
-#     X[col] = X[col].cat.codes  # Converts the category to its integer code
-
-# Results: Vast majority of respondents report work interference. Those who have sought treatment skew more towards the higher frequency than those untreated
-# TODO should we omit this? Idk it's an odd variable to predict having sought treatment anyway. But this group have already sought treatment so... it feels odd to me
-
-#todo remove self employed work interfere missing values
-
-# todo there's also a few ordinal categories which i think should be encoded numerically (see todos above)
-
-
-#feature importance is probably the key here - we want to focus on what allows employees to be able to seek treatment, not whether they do todo
-
 
 # Set pandas to display all columns
 pd.set_option('display.max_columns', None)
@@ -74,7 +45,7 @@ df.replace({'gender' : ['queer/she/they', 'Trans-female', 'something kinda male?
                       'Androgyne', 'Agender', 'Guy (-ish) ^_^', 'male leaning androgynous', 'Trans woman', 'Neuter', 'Female (trans)', 'queer',
                       'A little about you', 'p', 'ostensibly male, unsure what that really means']}, 'Other', inplace = True)
 
-# Split the train and test data TODO could do xy method here now
+# Split the train and test data
 train, test = train_test_split(df, test_size=0.2, stratify=df['treatment'], random_state=42)
 
 ### INVESTIGATE MISSING VALUES #########################################################################################
@@ -178,7 +149,7 @@ for i in missing_cols:
     # a link to some of these variables, like family_history.
     # The relationships can also help us interpret the trends in these variables, e.g. those without a mental health condition
     # might be less likely to notice consequences others experienced (would need to check this with EDA)
-    # For our imputation, we shall proceed with MNAR-compatible methods
+    # For our imputation, we shall proceed with both MAR and MNAR-compatible methods and compare
         #TODO Question: is this interpretation correct? Does MNAR status (known from prior survey knowledge) supercede MAR status?
 
     # self_employed significant columns: ['anonymity', 'coworkers', 'mental_health_interview']
@@ -189,9 +160,6 @@ for i in missing_cols:
 
 
 ### IMPUTE MISSING VALUES ##############################################################################################
-### Handling MNAR values
-    # Note: This is only done for work_interfere so for other data sets needs to be adapted as a function
-
 # Store a dict of ordinal/one-hot-encoding categories and their categories (in order for ordinal)
 ordinal_cats = {"work_interfere" : ['Never', 'Rarely', 'Sometimes', 'Often'],
                 "no_employees" : ['1-5', '6-25', '26-100', '100-500', '500-1000', 'More than 1000'],
@@ -202,8 +170,8 @@ ordinal_cats = {"work_interfere" : ['Never', 'Rarely', 'Sometimes', 'Often'],
                 "mental_health_interview" : ['No', 'Maybe', 'Yes'],
                 "phys_health_interview" : ['No', 'Maybe', 'Yes'],
                 }
-# Note: for one_hot encoding the column values aren't actually needed TODO currently don't do one_hot encoding here
-one_hot_cats = {"self_employed" : ['Yes', 'No'],
+# Note: for one_hot encoding the column values aren't actually needed, but leaving in for possible future use and reference
+nominal_cats = {"self_employed" : ['Yes', 'No'],
                 "gender" : ['Male', 'Female', 'Other'],
                 "family_history": ['Yes', 'No'],
                 "treatment": ['Yes', 'No'],
@@ -218,95 +186,125 @@ one_hot_cats = {"self_employed" : ['Yes', 'No'],
                 "mental_vs_physical" : ['Yes', "Don't know", 'No'],
                 "obs_consequence" : ['Yes', 'No']
                 }
-#TODO Question: If you have ordinal categories and a 'don't know', what's the best way to handle it
+# TODO Question: If you have ordinal categories and a 'don't know', what's the best way to handle it
 
 # TODO Question: I think the fact we can potentially infer mental health conditions from the work_interfere column is interesting;
 # TODO           is it valid to add that as a column and use as a feature or bad practice?
 
-### Create data set to with categorical encodings before imputing, and to prepare for model development
-# Ordinal categories - do this before imputation
+### Encode ordinal categories and convert nominal categories to pd categories for imputation
+# Ordinal categories
 for cat, codes in ordinal_cats.items():
     train[cat] = pd.Categorical(train[cat], categories=ordinal_cats[cat], ordered=True).codes
-    # Replace -1 with np.nan if needed (sometimes factorize returns -1, but pd.Categorical.cat.codes returns -1 for NaN) TODO
+    # Replace -1 with np.nan if needed (sometimes factorize returns -1, but pd.Categorical.cat.codes returns -1 for NaN)
     train[cat] = train[cat].replace(-1, np.nan)
 
-# Create a dataset to store intermediate columns for missingness handling TODO tweaked this in code
+# Nominal categories
+for cat in nominal_cats.keys():
+    train[cat] = pd.Categorical(train[cat], ordered=False)
+
+# Create a dataset to store intermediate columns for missingness handling
 train_missing = train.copy()
 
-# MAR Imputation (Iterative) - Use MICE with Random Forest (for categorical data) # TODO Can i do KNN here?
-def impute_mar(target_col, input_df):
-    print([sig_cols_dict[target_col]])
-    print("****", sig_cols_dict)
-    imputer_mar = IterativeImputer(estimator=RandomForestClassifier(), max_iter=10, random_state=42)
-    input_df[f'{target_col}_code_imputed'] = imputer_mar.fit_transform(input_df[sig_cols_dict[target_col]]) #TODO check this works corrrectly (now doesn't bc nominal cats!!)
+# Reset index for miceforest use
+train_missing = train_missing.reset_index(drop=True)
 
+### MAR Imputation for complete dataset with MICE
+# Initialize kernel (handles categoricals natively)
+kernel = mf.ImputationKernel(
+    data=train_missing, num_datasets=1, random_state=42) #todo 20
 
-    # Convert imputed column back to categories to investigate todo for final data I don't need this but good for evaluating at end
-    input_df[f'{target_col}_mar'] = pd.Categorical(
-        pd.Series(np.round(input_df[f'{target_col}_code_imputed'].to_numpy()).astype(int)),
-        categories=range(len(ordinal_cats[target_col])), ordered=True).rename_categories(ordinal_cats[target_col]) #TODO check this works
+# Run MICE with 10 iterations
+kernel.mice(iterations=10)
+kernel.plot_feature_importance(dataset=0)
+kernel.plot_imputed_distributions()
 
+# Extract completed data
+train_missing = kernel.complete_data()
 
 # todo certain parts need to be indented as Show_inves and else have the streamlined process
 
-# TODO: Qeustion: The imputation above doesn't work because of nominal categories. What's the best way to handle this?
-# e.g. should I do ordinal values for the binary categories and not use the rest for imputation?
-# Impute missing values assuming MAR
-    # Note: work_interfere is included here as we see some correlation, but we can also impute assuming it's an MNAR
-for col in missing_cols:
-    print(col)
-    impute_mar(col, train_missing)
-    print("To do: Fix MAR imputation")
-
 # (Alternative) MNAR Imputation with new category as the missingness is informative; no mental health condition
-train_missing['work_interfere_mnar'] = train_missing['work_interfere'].fillna('No Condition Disclosed')
+train_missing['work_interfere_mnar'] = train['work_interfere'].reset_index(drop=True).fillna('No Condition Disclosed')
 #TODO Question: Is it bad practice to handle MNAR with adding a new category in the same column? Should it be separate?
 #TODO Also, other example code uses 'Never' because most participants don't seek treatment. But personally I don't think
 # we can draw that conclusion - am I wrong?
-#TODO Questoin: Should I instead be implementing the more advanced MNAR methods, or just assume MAR since we have a relationship?
+#TODO Question: Should I instead be implementing the more advanced MNAR methods, or just assume MAR since we have a relationship?
 
-# Compare distributions TODO need to go back and fix MAR imputation
-print("\nImputation Comparison:")
-# print("MAR Imputed Distribution:")
-# print(train_missing['work_interfere_mar'].value_counts(normalize=True))
-print("\nMNAR Imputed Distribution:")
-print(train_missing['work_interfere_mnar'].value_counts(normalize=True))
+# Compare distributions before/MAR/MNAR
+if Show_M_inves:
+    print(f"\n\nOriginal Values:\n", train['work_interfere'].value_counts(dropna=False))
+    print(f"MAR Values:\n", train_missing['work_interfere'].value_counts(dropna=False))
+    print(f"MNAR Values:\n", train_missing['work_interfere_mnar'].value_counts(dropna=False))
 
-# Compare actual values
-print("\n\n")
-print(f"Original Values:\n", train_missing['work_interfere'].value_counts(dropna=False))
-# print(f"MAR Values:\n", train_missing['work_interfere_mar'].value_counts(dropna=False))
-print(f"MNAR Values:\n", train_missing['work_interfere_mnar'].value_counts(dropna=False))
+### Plot work_interfere to compare
+# Define a helper function to convert a series to an ordered categorical with our desired order.
+def to_ordered_category(series, base_order=[0, 1, 2, 3]):
+    # If "No Condition Disclosed" appears in the series, add it at the end.
+    if "No Condition Disclosed" in series.unique():
+        cat_order = base_order + ["No Condition Disclosed"]
+    else:
+        cat_order = base_order
+    return pd.Categorical(series, categories=cat_order, ordered=True)
 
-# Results: TODO make a conclusion on MAR vs MNAR when it's fixed
+# Convert the columns (you may choose to create new columns if you wish to preserve the originals)
+train['work_interfere_cat'] = to_ordered_category(train['work_interfere'])
+train_missing['work_interfere_cat'] = to_ordered_category(train_missing['work_interfere'])
+train_missing['work_interfere_mnar_cat'] = to_ordered_category(train_missing['work_interfere_mnar'])
 
-# TODO: For now we proceed with the MNAR results and do a simple mode imputation for self_employed
+if Show_graphs: #TODO clean up
+    # Create subplots for each version
+    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(18, 6), sharey=True)
 
-# TODO remove this once I fix MAR...
-# Impute self_employed with the modal value and add to _mode column
-se_mode = train_missing['self_employed'].mode().values[0]
-train_missing['self_employed_mode'] = train_missing['self_employed']
-train_missing.fillna({'self_employed_mode': se_mode}, inplace=True)
+    # Plot for train['work_interfere']
+    sns.countplot(x='work_interfere_cat', data=train,
+                  order=train['work_interfere_cat'].cat.categories, ax=axes[0])
+    axes[0].set_title("Original distribution")
+    axes[0].set_xlabel("Work Interfere")
+    axes[0].set_ylabel("Count")
 
-# Update the training data frame with the imputed values
-train['work_interfere'] = train_missing['work_interfere_mnar']
-train['self_employed'] = train_missing['self_employed_mode']
+    # Plot for train_missing['work_interfere']
+    sns.countplot(x='work_interfere_cat', data=train_missing,
+                  order=train_missing['work_interfere_cat'].cat.categories, ax=axes[1])
+    axes[1].set_title("MAR imputation")
+    axes[1].set_xlabel("Work Interfere")
+    axes[1].set_ylabel("")
 
-print(train.head(1))
+    # Plot for train_missing['work_interfere_mnar']
+    sns.countplot(x='work_interfere_mnar_cat', data=train_missing,
+                  order=train_missing['work_interfere_mnar_cat'].cat.categories, ax=axes[2])
+    axes[2].set_title("MNAR distribution")
+    axes[2].set_xlabel("Work Interfere (MNAR)")
+    axes[2].set_ylabel("")
 
-exit()
-# Nominal categories (do one-hot encoding) todo this doesn't work with iterative imputer... find out where to put it
-for cat in one_hot_cats.keys():
-    train = pd.get_dummies(train, columns=[cat], dtype=int)
+    plt.suptitle("Distribution of Work Interfere Categories", fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.show()
+
+# Results: We can see a slightly different distribution for the MAR imputed values. This is consistent with what we
+# expect to see with the 0/1 being higher after imputation - as those that didn't answer are likely to be those without
+# mental health conditions we would expect work interference to be low. But we do see an increase in the higher values too
+# (to a lesser extent) which makes sense as those undiagnosed/unwilling to disclose will also see some work interference.
+# Based on these results, I think the best choice is to move forward with the MICE imputed values for work_interfere.
+
+# Let's drop the MNAR column to just use the MICE imputed values
+train_missing = train_missing.drop(['work_interfere_mnar'], axis=1)
+
+# Write to csv for use in model_building.py
+train_missing.to_csv("training_data", sep="'")
 
 
+# # Nominal categories (do one-hot encoding) todo do i need this for model building/this is
+# for cat in nominal_cats.keys():
+#     train = pd.get_dummies(train, columns=[cat], dtype=int)
+
+# # Nominal variables: One-hot encode for modeling
+# train_imputed = pd.get_dummies(train_imputed,columns=nominal_cols)
 
 
 
 # TODO all the missingess/imputation code needs careful testing before deploying with a research model, e.g. check categories are
-# TODO converted back correctly, imputations make sense, chi squared is working correctly, etc
+#  converted back correctly, imputations make sense, chi squared is working correctly, etc
 
-#TODO: problem: iterativeimpute isn't working so my MAR code is currently commented out and I do an alternative method
 
 # TODO need to repeat encoding on the test data in the other file. and maybe missing data or whatever else
 
