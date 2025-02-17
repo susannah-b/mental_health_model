@@ -4,24 +4,14 @@ import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn import metrics
-from sklearn.metrics import mean_squared_error
-import xgboost as xgb
 import pandas as pd
-from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from sklearn.preprocessing import StandardScaler
 from pathlib import Path
 import missingno as msno
-from sklearn.linear_model import LogisticRegression
-from sklearn.impute import KNNImputer
 from scipy.stats import chi2_contingency
-from statsmodels.imputation.mice import MICEData
 import statsmodels.api as sm
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer
-from sklearn.ensemble import RandomForestClassifier
 import miceforest as mf
-#todo make sure all libraries are used above
+from sklearn.preprocessing import LabelEncoder
 
 # Set pandas to display all columns
 pd.set_option('display.max_columns', None)
@@ -48,6 +38,10 @@ df.replace({'gender' : ['queer/she/they', 'Trans-female', 'something kinda male?
 # Split the train and test data
 train, test = train_test_split(df, test_size=0.2, stratify=df['treatment'], random_state=42)
 
+# Split train data into X and y
+X_train = train.drop('treatment',axis=1)
+y_train = train['treatment'].copy()
+
 ### INVESTIGATE MISSING VALUES #########################################################################################
 # Set a bool to display graphs or missingness exploration
 Show_graphs = False
@@ -56,7 +50,7 @@ Show_M_inves = False
 missing_cols = ["work_interfere", "self_employed"]
 # Visualize missingness patterns
 if Show_graphs:
-    msno.matrix(train)
+    msno.matrix(X_train)
     plt.show()
     # Result: No visible pattern but could be linked to other variables. For work_interfere we know that the question requires
     # the presence of a mental health condition so is MNAR.
@@ -66,7 +60,8 @@ if Show_graphs:
     # For work_interfere we will also look at missingness type but impute with methods suitable for MNAR
 
 # List categorical and continuous columns in order to split between chi squared and regression tests
-categorical_cols = ['gender', 'self_employed', 'family_history', 'treatment', 'work_interfere',
+    # Note: excludes 'treatment' as the predictor variable
+categorical_cols = ['gender', 'self_employed', 'family_history', 'work_interfere',
                     'no_employees', 'remote_work', 'tech_company', 'benefits', 'care_options', 'wellness_program',
                     'seek_help', 'anonymity', 'leave', 'mental_health_consequence', 'phys_health_consequence',
                     'coworkers', 'supervisor', 'mental_health_interview', 'phys_health_interview',
@@ -134,13 +129,13 @@ sig_cols_dict = {}
 for i in missing_cols:
     # Show breakdown of categories, including missing data
     if Show_M_inves:
-        print(f"\n{i} Values:\n", train[i].value_counts(dropna=False))
+        print(f"\n{i} Values:\n", X_train[i].value_counts(dropna=False))
     # Call function to test for missingness type
-    sig_cols = test_missing_mechanisms(train, target_col=i, categorical_vars=categorical_cols, continuous_vars=continuous_cols)
+    sig_cols = test_missing_mechanisms(X_train, target_col=i, categorical_vars=categorical_cols, continuous_vars=continuous_cols)
     sig_cols_dict[i] = sig_cols
 
     # Result:
-    # work_interfere significant columns: ['gender', 'family_history', 'treatment', 'benefits', 'care_options', 'wellness_program', 'seek_help',
+    # work_interfere significant columns: ['gender', 'family_history', 'benefits', 'care_options', 'wellness_program', 'seek_help',
     #           'leave', 'mental_health_consequence', 'phys_health_consequence', 'supervisor', 'mental_health_interview',
     #           'obs_consequence', 'age']
 
@@ -161,6 +156,7 @@ for i in missing_cols:
 
 ### IMPUTE MISSING VALUES ##############################################################################################
 # Store a dict of ordinal/one-hot-encoding categories and their categories (in order for ordinal)
+    # Minus 'treatment' column; only in X data
 ordinal_cats = {"work_interfere" : ['Never', 'Rarely', 'Sometimes', 'Often'],
                 "no_employees" : ['1-5', '6-25', '26-100', '100-500', '500-1000', 'More than 1000'],
                 "mental_health_consequence" : ['No', 'Maybe', 'Yes'],
@@ -174,7 +170,6 @@ ordinal_cats = {"work_interfere" : ['Never', 'Rarely', 'Sometimes', 'Often'],
 nominal_cats = {"self_employed" : ['Yes', 'No'],
                 "gender" : ['Male', 'Female', 'Other'],
                 "family_history": ['Yes', 'No'],
-                "treatment": ['Yes', 'No'],
                 "remote_work" : ['Yes', 'No'],
                 "tech_company" : ['Yes', 'No'],
                 "benefits" : ['Yes', "Don't know", 'No'],
@@ -194,16 +189,16 @@ nominal_cats = {"self_employed" : ['Yes', 'No'],
 ### Encode ordinal categories and convert nominal categories to pd categories for imputation
 # Ordinal categories
 for cat, codes in ordinal_cats.items():
-    train[cat] = pd.Categorical(train[cat], categories=ordinal_cats[cat], ordered=True).codes
+    X_train[cat] = pd.Categorical(X_train[cat], categories=ordinal_cats[cat], ordered=True).codes
     # Replace -1 with np.nan if needed (sometimes factorize returns -1, but pd.Categorical.cat.codes returns -1 for NaN)
-    train[cat] = train[cat].replace(-1, np.nan)
+    X_train[cat] = X_train[cat].replace(-1, np.nan)
 
 # Nominal categories
 for cat in nominal_cats.keys():
-    train[cat] = pd.Categorical(train[cat], ordered=False)
+    X_train[cat] = pd.Categorical(X_train[cat], ordered=False)
 
 # Create a dataset to store intermediate columns for missingness handling
-train_missing = train.copy()
+train_missing = X_train.copy()
 
 # Reset index for miceforest use
 train_missing = train_missing.reset_index(drop=True)
@@ -224,17 +219,17 @@ train_missing = kernel.complete_data()
 # todo certain parts need to be indented as Show_inves and else have the streamlined process
 
 # (Alternative) MNAR Imputation with new category as the missingness is informative; no mental health condition
-train_missing['work_interfere_mnar'] = train['work_interfere'].reset_index(drop=True).fillna('No Condition Disclosed')
+train_missing['work_interfere_mnar'] = X_train['work_interfere'].reset_index(drop=True).fillna('No Condition Disclosed')
 #TODO Question: Is it bad practice to handle MNAR with adding a new category in the same column? Should it be separate?
 #TODO Also, other example code uses 'Never' because most participants don't seek treatment. But personally I don't think
 # we can draw that conclusion - am I wrong?
 #TODO Question: Should I instead be implementing the more advanced MNAR methods, or just assume MAR since we have a relationship?
 
 # Compare distributions before/MAR/MNAR
-# if Show_M_inves:
-print(f"\n\nOriginal Values:\n", train['work_interfere'].value_counts(dropna=False))
-print(f"MAR Values:\n", train_missing['work_interfere'].value_counts(dropna=False))
-print(f"MNAR Values:\n", train_missing['work_interfere_mnar'].value_counts(dropna=False))
+if Show_M_inves:
+    print(f"\n\nOriginal Values:\n", X_train['work_interfere'].value_counts(dropna=False))
+    print(f"MAR Values:\n", train_missing['work_interfere'].value_counts(dropna=False))
+    print(f"MNAR Values:\n", train_missing['work_interfere_mnar'].value_counts(dropna=False))
 
 ### Plot work_interfere to compare TODO tweak, e.g. show percentages, fix FutureWarning, make colours consistent for cats
 if Show_graphs:
@@ -249,7 +244,7 @@ if Show_graphs:
 
     # Create a temporary DataFrame for plotting
     plot_df = pd.DataFrame({
-        "Original": train['work_interfere'],
+        "Original": X_train['work_interfere'],
         "MAR Imputed": train_missing['work_interfere'],
         "MNAR Imputed": train_missing['work_interfere_mnar']
     })
@@ -314,18 +309,35 @@ train_missing = train_missing.drop(['work_interfere_mnar'], axis=1)
 # Nominal variables: One-hot encode for modeling #TODO check this is what I want!
 train_missing = pd.get_dummies(train_missing,columns=nominal_cats.keys(), dtype=int)
 
-print(train_missing.head(1))
-# Write to csv for use in model_building.py
-train_missing.to_csv("training_data", sep="'")
+# Scale X_train data
+std_scaler = StandardScaler()
+train_missing_scaled = std_scaler.fit_transform(train_missing)
+train_missing = pd.DataFrame(train_missing_scaled, index=train_missing.index, columns=train_missing.columns)
 
+### Encode y_train
+print("Before:", y_train.head(6))
+label_encoder = LabelEncoder()
+label_encoder.fit(y_train)
+y_encoded= label_encoder.transform(y_train)
+# Convert back to df
+y_train = pd.DataFrame(y_encoded, index=y_train.index, columns=["treatment"])
+print("After:", y_train.head(6))
+
+# Note: 'treatment' has almost equal values for both the categories. We do not have to perform undersampling or oversampling
+
+# Write to csv for use in model_building.py
+train_missing.to_csv("X_training_data.csv", sep=",") # X_train data
+y_train.to_csv("y_training_data.csv", sep=",") # y_train data
+
+#TODO correlation matrix
 
 
 
 # TODO all the missingess/imputation code needs careful testing before deploying with a research model, e.g. check categories are
 #  converted back correctly, imputations make sense, chi squared is working correctly, etc
 
+# TODO need to repeat encoding on the X test data. and maybe missing data or whatever else - and y_test encoding as needed
 
-# TODO need to repeat encoding on the test data in the other file. and maybe missing data or whatever else
-
+# TODO: Check data looks correct. Might require a toy data set with a few values and work through whole process checking correct values are maintained
 
 
