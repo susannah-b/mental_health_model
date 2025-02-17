@@ -231,53 +231,75 @@ train_missing['work_interfere_mnar'] = train['work_interfere'].reset_index(drop=
 #TODO Question: Should I instead be implementing the more advanced MNAR methods, or just assume MAR since we have a relationship?
 
 # Compare distributions before/MAR/MNAR
-if Show_M_inves:
-    print(f"\n\nOriginal Values:\n", train['work_interfere'].value_counts(dropna=False))
-    print(f"MAR Values:\n", train_missing['work_interfere'].value_counts(dropna=False))
-    print(f"MNAR Values:\n", train_missing['work_interfere_mnar'].value_counts(dropna=False))
+# if Show_M_inves:
+print(f"\n\nOriginal Values:\n", train['work_interfere'].value_counts(dropna=False))
+print(f"MAR Values:\n", train_missing['work_interfere'].value_counts(dropna=False))
+print(f"MNAR Values:\n", train_missing['work_interfere_mnar'].value_counts(dropna=False))
 
-### Plot work_interfere to compare
-# Define a helper function to convert a series to an ordered categorical with our desired order.
-def to_ordered_category(series, base_order=[0, 1, 2, 3]):
-    # If "No Condition Disclosed" appears in the series, add it at the end.
-    if "No Condition Disclosed" in series.unique():
-        cat_order = base_order + ["No Condition Disclosed"]
-    else:
-        cat_order = base_order
-    return pd.Categorical(series, categories=cat_order, ordered=True)
+### Plot work_interfere to compare TODO tweak, e.g. show percentages, fix FutureWarning, make colours consistent for cats
+if Show_graphs:
+    # Create mapping dictionary for numeric codes to labels
+    category_map = {
+        0.0: 'Never',
+        1.0: 'Rarely',
+        2.0: 'Sometimes',
+        3.0: 'Often',
+        'No Condition Disclosed': 'No Condition Disclosed'
+    }
 
-# Convert the columns (you may choose to create new columns if you wish to preserve the originals)
-train['work_interfere_cat'] = to_ordered_category(train['work_interfere'])
-train_missing['work_interfere_cat'] = to_ordered_category(train_missing['work_interfere'])
-train_missing['work_interfere_mnar_cat'] = to_ordered_category(train_missing['work_interfere_mnar'])
+    # Create a temporary DataFrame for plotting
+    plot_df = pd.DataFrame({
+        "Original": train['work_interfere'],
+        "MAR Imputed": train_missing['work_interfere'],
+        "MNAR Imputed": train_missing['work_interfere_mnar']
+    })
 
-if Show_graphs: #TODO clean up
-    # Create subplots for each version
-    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(18, 6), sharey=True)
+    # Create figure with subplots
+    fig, axes = plt.subplots(1, 3, figsize=(20, 6), sharey=True)
+    plt.suptitle("Work Interfere Distribution Comparison", fontsize=16, y=1.05)
 
-    # Plot for train['work_interfere']
-    sns.countplot(x='work_interfere_cat', data=train,
-                  order=train['work_interfere_cat'].cat.categories, ax=axes[0])
-    axes[0].set_title("Original distribution")
-    axes[0].set_xlabel("Work Interfere")
-    axes[0].set_ylabel("Count")
+    # Define order for first two plots
+    main_order = ['Never', 'Rarely', 'Sometimes', 'Often']
+    mnar_order = main_order + ['No Condition Disclosed']
 
-    # Plot for train_missing['work_interfere']
-    sns.countplot(x='work_interfere_cat', data=train_missing,
-                  order=train_missing['work_interfere_cat'].cat.categories, ax=axes[1])
-    axes[1].set_title("MAR imputation")
-    axes[1].set_xlabel("Work Interfere")
+    # Plot Original
+    sns.countplot(
+        x=plot_df['Original'].map(category_map),
+        order=main_order,
+        ax=axes[0],
+        palette='viridis'
+    )
+    axes[0].set_title("Original Data (with Missing)", fontsize=12)
+    axes[0].set_xlabel("")
+    axes[0].tick_params(axis='x', rotation=45)
+
+    # Plot MAR Imputed
+    sns.countplot(
+        x=plot_df['MAR Imputed'].map(category_map),
+        order=main_order,
+        ax=axes[1],
+        palette='viridis'
+    )
+    axes[1].set_title("MAR Imputed", fontsize=12)
+    axes[1].set_xlabel("")
     axes[1].set_ylabel("")
+    axes[1].tick_params(axis='x', rotation=45)
 
-    # Plot for train_missing['work_interfere_mnar']
-    sns.countplot(x='work_interfere_mnar_cat', data=train_missing,
-                  order=train_missing['work_interfere_mnar_cat'].cat.categories, ax=axes[2])
-    axes[2].set_title("MNAR distribution")
-    axes[2].set_xlabel("Work Interfere (MNAR)")
+    # Plot MNAR Imputed
+    sns.countplot(
+        x=plot_df['MNAR Imputed'].map(category_map),
+        order=mnar_order,
+        ax=axes[2],
+        palette='viridis'
+    )
+    axes[2].set_title("MNAR Imputed", fontsize=12)
+    axes[2].set_xlabel("")
     axes[2].set_ylabel("")
+    axes[2].tick_params(axis='x', rotation=45)
 
-    plt.suptitle("Distribution of Work Interfere Categories", fontsize=16)
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    # Adjust layout and add y-label
+    fig.text(0.08, 0.5, 'Count', va='center', rotation='vertical', fontsize=12)
+    plt.tight_layout()
     plt.show()
 
 # Results: We can see a slightly different distribution for the MAR imputed values. This is consistent with what we
@@ -289,16 +311,13 @@ if Show_graphs: #TODO clean up
 # Let's drop the MNAR column to just use the MICE imputed values
 train_missing = train_missing.drop(['work_interfere_mnar'], axis=1)
 
+# Nominal variables: One-hot encode for modeling #TODO check this is what I want!
+train_missing = pd.get_dummies(train_missing,columns=nominal_cats.keys(), dtype=int)
+
+print(train_missing.head(1))
 # Write to csv for use in model_building.py
 train_missing.to_csv("training_data", sep="'")
 
-
-# # Nominal categories (do one-hot encoding) todo do i need this for model building/this is
-# for cat in nominal_cats.keys():
-#     train = pd.get_dummies(train, columns=[cat], dtype=int)
-
-# # Nominal variables: One-hot encode for modeling
-# train_imputed = pd.get_dummies(train_imputed,columns=nominal_cols)
 
 
 
