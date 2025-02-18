@@ -307,6 +307,7 @@ if Show_graphs:
 train_missing = train_missing.drop(['work_interfere_mnar'], axis=1)
 
 # Nominal variables: One-hot encode for modeling #TODO check this is what I want!
+train_condensed = train_missing.copy() # Make a copy of the dataset before one-hot encoding
 train_missing = pd.get_dummies(train_missing,columns=nominal_cats.keys(), dtype=int)
 
 # Scale X_train data
@@ -315,23 +316,61 @@ train_missing_scaled = std_scaler.fit_transform(train_missing)
 train_missing = pd.DataFrame(train_missing_scaled, index=train_missing.index, columns=train_missing.columns)
 
 ### Encode y_train
-print("Before:", y_train.head(6))
 label_encoder = LabelEncoder()
 label_encoder.fit(y_train)
 y_encoded= label_encoder.transform(y_train)
 # Convert back to df
 y_train = pd.DataFrame(y_encoded, index=y_train.index, columns=["treatment"])
-print("After:", y_train.head(6))
+# Reset index to match other datasets
 
+y_train = y_train.reset_index(drop=True) # Use drop to remove the old index TODO check this is consistent with all the others
 # Note: 'treatment' has almost equal values for both the categories. We do not have to perform undersampling or oversampling
 
 # Write to csv for use in model_building.py
-train_missing.to_csv("X_training_data.csv", sep=",") # X_train data
-y_train.to_csv("y_training_data.csv", sep=",") # y_train data
-
-#TODO correlation matrix
+train_missing.to_csv("X_training_data.csv", sep=",", index=False) # X_train data
+y_train.to_csv("y_training_data.csv", sep=",", index=False) # y_train data
 
 
+### CORRELATION MATRIX #################################################################################################
+if Show_graphs:
+    # Compute the correlation matrix
+    train_missing['treatment'] = y_train['treatment']
+    print(train_missing['treatment'].head())
+    corr = train_missing.corr()
+    print(list(train_missing.columns))
+    # TODO this heatmap doesn't show the treatment column but moving on for now - remove prints when fixed
+
+    mask = np.zeros_like(corr, dtype=bool)
+    mask[np.triu_indices_from(mask)] = True
+
+    f, ax = plt.subplots(figsize=(10, 8))
+
+    # Draw the heatmap with the mask and correct aspect ratio
+    sns.heatmap(corr, mask=mask, cmap='vlag', vmax=.3, center=0, square=True, linewidths=.2, cbar_kws={"shrink": .5})
+    plt.show()
+
+    # Result: Something important to note for one-hot encoded data... it's useless between split columns from the same nominal
+    # category!
+
+    ### If we remove nominal categories:
+    # Filter out nominal columns before computing correlations
+    train_no_nominal = train_condensed.drop(columns=nominal_cats, errors='ignore')  # 'errors=ignore' skips non-existent columns
+    # Add treatment column back to see correlation
+    train_no_nominal['treatment'] = y_train['treatment']
+    # Compute correlation matrix on the filtered data
+    corr = train_no_nominal.corr()
+
+    # Generate mask for upper triangle
+    mask = np.zeros_like(corr, dtype=bool)
+    mask[np.triu_indices_from(mask)] = True
+
+    # Plot
+    f, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(corr, mask=mask, cmap='vlag', vmax=.3, center=0, square=True, linewidths=.2, cbar_kws={"shrink": .5})
+    plt.show()
+    print("full", train_missing['treatment'].isna().sum())
+    print("NONOMINAL", train_no_nominal['treatment'].isna().sum())
+    # Result: Can see some pos/neg correlations, but none with treatment
 
 # TODO all the missingess/imputation code needs careful testing before deploying with a research model, e.g. check categories are
 #  converted back correctly, imputations make sense, chi squared is working correctly, etc
@@ -340,4 +379,5 @@ y_train.to_csv("y_training_data.csv", sep=",") # y_train data
 
 # TODO: Check data looks correct. Might require a toy data set with a few values and work through whole process checking correct values are maintained
 
-
+# TODO: reset_index has caused some problems! for final datasets and when combining them, check the indexes. Also does it matter for
+# the model building? did i lose any info
