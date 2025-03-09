@@ -184,7 +184,7 @@ nominal_cats = {"self_employed" : ['Yes', 'No'],
 # TODO Question: If you have ordinal categories and a 'don't know', what's the best way to handle it
 
 # TODO Question: I think the fact we can potentially infer mental health conditions from the work_interfere column is interesting;
-# TODO           is it valid to add that as a column and use as a feature or bad practice?
+# TODO           is it valid to add that as a column and use as a feature or bad practice? (perhaps here it's mainly an ethics concern)
 
 ### Encode ordinal categories and convert nominal categories to pd categories for imputation
 # Ordinal categories
@@ -206,7 +206,7 @@ train_missing = train_missing.reset_index(drop=True)
 ### MAR Imputation for complete dataset with MICE
 # Initialize kernel (handles categoricals natively)
 kernel = mf.ImputationKernel(
-    data=train_missing, num_datasets=1, random_state=42) #todo 20
+    data=train_missing, num_datasets=20, random_state=42)
 
 # Run MICE with 10 iterations
 kernel.mice(iterations=10)
@@ -223,7 +223,7 @@ train_missing['work_interfere_mnar'] = X_train['work_interfere'].reset_index(dro
 #TODO Question: Is it bad practice to handle MNAR with adding a new category in the same column? Should it be separate?
 #TODO Also, other example code uses 'Never' because most participants don't seek treatment. But personally I don't think
 # we can draw that conclusion - am I wrong?
-#TODO Question: Should I instead be implementing the more advanced MNAR methods, or just assume MAR since we have a relationship?
+# TODO Question: Should I instead be implementing the more advanced MNAR methods, or just assume MAR since we have a relationship?
 
 # Compare distributions before/MAR/MNAR
 if Show_M_inves:
@@ -335,10 +335,10 @@ y_train.to_csv("y_training_data.csv", sep=",", index=False) # y_train data
 if Show_graphs:
     # Compute the correlation matrix
     train_missing['treatment'] = y_train['treatment']
-    print(train_missing['treatment'].head())
+    # print(train_missing['treatment'].head())
     corr = train_missing.corr()
-    print(list(train_missing.columns))
-    # TODO this heatmap doesn't show the treatment column but moving on for now - remove prints when fixed
+    # print(list(train_missing.columns))
+    # TODO this heatmap doesn't show the treatment column for some reason - remove prints when fixed
 
     mask = np.zeros_like(corr, dtype=bool)
     mask[np.triu_indices_from(mask)] = True
@@ -372,12 +372,76 @@ if Show_graphs:
     print("NONOMINAL", train_no_nominal['treatment'].isna().sum())
     # Result: Can see some pos/neg correlations, but none with treatment
 
-# TODO all the missingess/imputation code needs careful testing before deploying with a research model, e.g. check categories are
+
+### TEST DATA PREPROCESSING ############################################################################################
+# Now we need to perform the same processing steps as our train data on our test data
+
+# Split test data into X and y
+X_test = test.drop('treatment',axis=1)
+y_test = test['treatment'].copy()
+
+### Handle categories - ordinal and nominal
+for cat, codes in ordinal_cats.items():
+# Ordinal categories
+    X_test[cat] = pd.Categorical(X_test[cat], categories=ordinal_cats[cat], ordered=True).codes
+    # Replace -1 with np.nan if needed (sometimes factorize returns -1, but pd.Categorical.cat.codes returns -1 for NaN)
+    X_test[cat] = X_test[cat].replace(-1, np.nan)
+# Nominal categories
+for cat in nominal_cats.keys():
+    X_test[cat] = pd.Categorical(X_test[cat], ordered=False)
+
+# Create a dataset to store intermediate columns for missingness handling
+test_missing = X_test.copy()
+
+# Reset index for miceforest use
+test_missing = test_missing.reset_index(drop=True)
+
+### MAR Imputation for complete dataset with MICE
+# Initialize kernel (handles categoricals natively)
+kernel = mf.ImputationKernel(
+    data=test_missing, num_datasets=20, random_state=42)
+
+# Run MICE with 10 iterations
+kernel.mice(iterations=10)
+kernel.plot_feature_importance(dataset=0)
+kernel.plot_imputed_distributions()
+
+# Extract completed data
+test_missing = kernel.complete_data()
+
+# Skipping MNAR handling code but would need to reimplement if using MNAR instead
+
+# Nominal variables: One-hot encode for modeling
+test_condensed = test_missing.copy() # Make a copy of the dataset before one-hot encoding
+test_missing = pd.get_dummies(test_missing,columns=nominal_cats.keys(), dtype=int)
+
+# Scale X_test data
+std_scaler = StandardScaler()
+test_missing_scaled = std_scaler.fit_transform(test_missing)
+test_missing = pd.DataFrame(test_missing_scaled, index=test_missing.index, columns=test_missing.columns)
+
+### Encode y_test
+label_encoder = LabelEncoder()
+label_encoder.fit(y_test)
+y_encoded= label_encoder.transform(y_test)
+# Convert back to df
+y_test = pd.DataFrame(y_encoded, index=y_test.index, columns=["treatment"])
+# Reset index to match other datasets
+
+y_test = y_test.reset_index(drop=True) # Use drop to remove the old index
+# Note: 'treatment' has almost equal values for both the categories. We do not have to perform undersampling or oversampling
+
+# Write to csv for use in model_building.py
+test_missing.to_csv("X_testing_data.csv", sep=",", index=False) # X_test data
+y_test.to_csv("y_testing_data.csv", sep=",", index=False) # y_test data
+
+
+
+
+
+# TODO all the missingess/imputation code needs more careful testing before deploying with a research model, e.g. check categories are
 #  converted back correctly, imputations make sense, chi squared is working correctly, etc
 
-# TODO need to repeat encoding on the X test data. and maybe missing data or whatever else - and y_test encoding as needed
-
 # TODO: Check data looks correct. Might require a toy data set with a few values and work through whole process checking correct values are maintained
-
-# TODO: reset_index has caused some problems! for final datasets and when combining them, check the indexes. Also does it matter for
-# the model building? did i lose any info
+     # go through and check steps - e.g. the test data processing at the end was done quickly
+# TODO: reset_index has caused some problems! for final datasets and when combining them, check the indexes.
