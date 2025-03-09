@@ -6,6 +6,12 @@ In this project, we will prepare the data, perform Exploratory Data Analysis, pr
 
 The feature we are aiming to predict is 'treatment', i.e. whether or not the participant has sought treatment for a mental health issue. It is important to note the distinction between seeking treatment and having a mental health disorder; the former being only a sub-group of the latter. In addition to the ethical concerns of predicting mental health disorders in employees, by looking at whether or not an employee seeks treatment, companies can determine the factors that are most highly associated with seeking treatment to either identify stressors or examine which factors will allow an employee to seek treatment if they need it.
 
+## Scripts
+Scripts should be run in the following order:
+- **data_exploration.py:** An exploratory script that plots each feature in order to determine how to handle each. Not needed for the following scripts
+- **data_preprocessing.py:** Basic preprocessing steps like encoding; run this once before model building.
+- **model_building.py:** Model building, cross validation, and hyperparameter tuning.
+
 The explanation of each column in the data set is given below:
 ## Data
 - **Timestamp:** Time the data was taken
