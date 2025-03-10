@@ -12,6 +12,7 @@ Scripts should be run in the following order:
 - **data_preprocessing.py:** Basic preprocessing steps like encoding; run this once before model building.
 - **model_building.py:** Model building, cross validation, and hyperparameter tuning.
 
+
 The explanation of each column in the data set is given below:
 ## Data
 - **Timestamp:** Time the data was taken
