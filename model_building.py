@@ -4,8 +4,8 @@ from pathlib import Path
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 # from sklearn.metrics import accuracy_score, recall_score, confusion_matrix, classification_report, precision_recall_curve, auc # plot_roc_curve also it errored TODO
+# TODO (above) - was i going to implement more features using the above? check my other code (diamonds dataset might have used them)
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
-import xgboost as xgb
 from xgboost import XGBClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, f1_score
@@ -32,9 +32,8 @@ y_test = pd.read_csv(y_path).squeeze() # Convert to 1D array
 pd.set_option('display.max_columns', None)
 
 ### EVALUATE DIFFERENT MODELS ##########################################################################################
-# Bool to skip investigate
+# Bool to skip investigation
 Show_inves = True
-
 if Show_inves:
     # Initialise dict
     model_scores = {}
@@ -103,9 +102,6 @@ if Show_inves:
     # 3             AdaBoost Classifier  1.000000  0.639224          1.000   0.643
 
     # So here RF, GB, LR, and SVM perform the best on the test, with RF, XGB, and ADB on the train.
-    # TODO Typically I would proceed with RF, GB, SVM, and LR. However, for the purpose of practicing
-    #  XGBoost I will proceed with that model alongside some inital RF, GB, LR & SVM comparison
-
     # TODO Return to this model evaluation above after I have further refined the model development process
 
     # TODO: Question: Compared to two others that use XGBoost, my model is worse! I think this might mainly
@@ -116,7 +112,18 @@ if Show_inves:
     #  real ordinality despite some values ("Don't know") not fitting into the order.
 
 ### HYPEROPT PARAMETER TUNING ##########################################################################################
-# For selected models, define a parameter params['type'] for the model name. Also runs the training and calculates the cross-validation accuracy.
+# For selected models, define a parameter params['type'] for the model name. Then evaluates parameters and calculates the cross-validated accuracy.
+
+# Dictionary to store the best model accuracies
+best_accuracies = {
+    'svm': 0.0,
+    'rf': 0.0,
+    'logreg': 0.0,
+    'xgb': 0.0,
+    'gb': 0.0
+}
+
+#Objective function; which parameter configuation is used
 def objective(params):
     classifier_type = params['type']
     del params['type']
@@ -149,7 +156,14 @@ def objective(params):
         clf = GradientBoostingClassifier(**params)
     else:
         return 0
+    # Calculate model accuracy
     accuracy = cross_val_score(clf, X_train, y_train, cv=10).mean()
+
+    #  Track the best accuracy per model type
+    if accuracy > best_accuracies[classifier_type]:
+        best_accuracies[classifier_type] = accuracy
+        # Log the new best accuracy for this model type
+        mlflow.log_metric(f"best_{classifier_type}_accuracy", accuracy)
 
     # Because fmin() tries to minimize the objective, this function must return the negative accuracy.
     return {'loss': -accuracy, 'status': STATUS_OK}
@@ -203,15 +217,20 @@ search_space = hp.choice('classifier_type', [
 
 ])
 
-print("Now tuning hyperparameters \n")
 # Use fmin() to tune hyperparameters
+print("Now tuning hyperparameters \n")
 with mlflow.start_run():
     best_result = fmin(
         fn=objective,
         space=search_space,
         algo=tpe.suggest,
-        max_evals=10, #TODO change to 100 after testing
+        max_evals=100, #IMPROVE Change this to ~10 if testing further
         trials=Trials())
+
+# Print the best accuracies for each model
+print("\nHighest model accuracies on train data:")
+best_accuracy_df = pd.DataFrame(list(best_accuracies.items()), columns=['Models', 'Highest accuracy'])
+print(best_accuracy_df)
 
 # Extract the best set of hyperparameters and print
 best_config = space_eval(search_space, best_result)
@@ -229,7 +248,7 @@ with mlflow.start_run(): #TODO need to find examples of this being done - unsure
     # Log the best hyperparameters
     mlflow.log_params(best_config)
 
-    # Create the best model
+    # Construct the best model
     if classifier_type == 'svm':
         best_model = SVC(**best_params)
     elif classifier_type == 'rf':
@@ -256,7 +275,17 @@ with mlflow.start_run(): #TODO need to find examples of this being done - unsure
     mlflow.log_metric("test_accuracy", test_accuracy)
     mlflow.log_metric("test_f1", test_f1)
 
-    print(f"Test accuracy with best ({classifier_type}) model: {test_accuracy:.4f}")
-    print(f"Test F1 score with best ({classifier_type}) model: {test_f1:.4f}")
+    print(f"\nTest accuracy with best model ({classifier_type}): {test_accuracy:.4f}")
+    print(f"Test F1 score with best model ({classifier_type}): {test_f1:.4f}")
 
 
+# TODO: Question: If I get different models (LR and GB currently) on different runs, what should I do? Pick one? Use the
+#  most common of multiple attempts?
+
+# TODO: Test with ordinal encoding for some of the categories I used nominal
+#  Plot feature importance - could potentially remove unimportant features and retest
+#  Generate a learning curve
+
+# IMPROVE: Early stopping isn't implemented at all because it would work for some and not others so is more complicated to implement
+#  Could also do an ensemble model approach for the final training, and stacking/voting
+#  Examine errors to see if I can identify where I'm making mistakes
