@@ -181,10 +181,10 @@ nominal_cats = {"self_employed" : ['Yes', 'No'],
                 "mental_vs_physical" : ['Yes', "Don't know", 'No'],
                 "obs_consequence" : ['Yes', 'No']
                 }
-# TODO Question: If you have ordinal categories and a 'don't know', what's the best way to handle it
+# TODO Question: If you have ordinal categories and a 'don't know', what's the best way to handle it?
 
 # TODO Question: I think the fact we can potentially infer mental health conditions from the work_interfere column is interesting;
-# TODO           is it valid to add that as a column and use as a feature or bad practice? (perhaps here it's mainly an ethics concern)
+#  is it valid to add that as a column and use as a feature or bad practice? (perhaps here it's mainly an ethics concern)
 
 ### Encode ordinal categories and convert nominal categories to pd categories for imputation
 # Ordinal categories
@@ -216,7 +216,7 @@ kernel.plot_imputed_distributions()
 # Extract completed data
 train_missing = kernel.complete_data()
 
-# todo certain parts need to be indented as Show_inves and else have the streamlined process
+# todo certain parts need to be indented as Show_inves and the else has the streamlined process
 
 # (Alternative) MNAR Imputation with new category as the missingness is informative; no mental health condition
 train_missing['work_interfere_mnar'] = X_train['work_interfere'].reset_index(drop=True).fillna('No Condition Disclosed')
@@ -231,7 +231,7 @@ if Show_M_inves:
     print(f"MAR Values:\n", train_missing['work_interfere'].value_counts(dropna=False))
     print(f"MNAR Values:\n", train_missing['work_interfere_mnar'].value_counts(dropna=False))
 
-### Plot work_interfere to compare TODO tweak, e.g. show percentages, fix FutureWarning, make colours consistent for cats
+### Plot work_interfere to compare TODO tweak, e.g. show percentages, fix FutureWarning, make colours consistent for categories
 if Show_graphs:
     # Create mapping dictionary for numeric codes to labels
     category_map = {
@@ -306,7 +306,7 @@ if Show_graphs:
 # Let's drop the MNAR column to just use the MICE imputed values
 train_missing = train_missing.drop(['work_interfere_mnar'], axis=1)
 
-# Nominal variables: One-hot encode for modeling #TODO check this is what I want!
+# Nominal variables: One-hot encode for modeling #TODO check this is what I want! Is it better to do another method?
 train_condensed = train_missing.copy() # Make a copy of the dataset before one-hot encoding
 train_missing = pd.get_dummies(train_missing,columns=nominal_cats.keys(), dtype=int)
 
@@ -434,8 +434,6 @@ y_test = y_test.reset_index(drop=True) # Use drop to remove the old index
 # Write to csv for use in model_building.py
 test_missing.to_csv("X_testing_data.csv", sep=",", index=False) # X_test data
 y_test.to_csv("y_testing_data.csv", sep=",", index=False) # y_test data
-
-
 
 
 
