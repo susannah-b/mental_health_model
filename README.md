@@ -42,3 +42,7 @@ The explanation of each column in the data set is given below:
 - **mental_vs_physical:** Do you feel that your employer takes mental health as seriously as physical health?
 - **obs_consequence:** Have you heard of or observed negative consequences for coworkers with mental health conditions in your workplace?
 - **comments:** Any additional notes or comments
+
+## Improvements
+- **Feature selection:** Currently only manual feature selection is done (e.g. removal of 'state') and no feature selection methods
+- ... TODO

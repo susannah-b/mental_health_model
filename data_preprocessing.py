@@ -44,8 +44,8 @@ y_train = train['treatment'].copy()
 
 ### INVESTIGATE MISSING VALUES #########################################################################################
 # Set a bool to display graphs or missingness exploration
-Show_graphs = False
-Show_M_inves = False
+Show_graphs = True
+Show_M_inves = True
 ### Investigate missing values in work_interfere and self_employed
 missing_cols = ["work_interfere", "self_employed"]
 # Visualize missingness patterns
@@ -97,7 +97,7 @@ def test_missing_mechanisms(df, target_col, categorical_vars, continuous_vars):
                 if Show_M_inves:
                     print(f"{col}: χ²={chi2:.2f}, p={p:.4f}")
         except:
-            print(f"{col}: WARNING: Test failed.")
+            print(f"{col}: WARNING: Chi-squared test failed.")
 
     # Run Logistic Regression test for continuous variables to check if there is a relationship
     if Show_M_inves:
@@ -118,7 +118,7 @@ def test_missing_mechanisms(df, target_col, categorical_vars, continuous_vars):
                 if Show_M_inves:
                     print(f"{col}: Coef={model.params[col]:.2f}, p={p_value:.4f}")
         except:
-            print(f"{col}: Regression failed")
+            print(f"{col}: WARNING: Regression failed")
 
     print(f"{target_col} significant columns: {significant_cols}")
 

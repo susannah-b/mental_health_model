@@ -70,8 +70,8 @@ if Show_inves:
 
     # AdaBoost
     dt_clf_ada = DecisionTreeClassifier()
-    Ada_clf = AdaBoostClassifier(estimator=dt_clf_ada, random_state=42)
-    basic_train(Ada_clf,X_train,y_train,"AdaBoost Classifier",model_scores)
+    ada_clf = AdaBoostClassifier(estimator=dt_clf_ada, random_state=42)
+    basic_train(ada_clf,X_train,y_train,"AdaBoost Classifier",model_scores)
 
     # GradientBoost
     gdb_clf = GradientBoostingClassifier(random_state=42,subsample=0.8)
@@ -100,6 +100,8 @@ if Show_inves:
     # 5              XGBoost Classifier  1.000000  0.716764          1.000   0.713
     # 6  K-Nearest Neighbors Classifier  0.774194  0.646666          0.783   0.672
     # 3             AdaBoost Classifier  1.000000  0.639224          1.000   0.643
+
+    #TODO Test vs train accuracy might show overfitting to the data? But this isn't a final model so does it matter?
 
     # So here RF, GB, LR, and SVM perform the best on the test, with RF, XGB, and ADB on the train.
     # TODO Return to this model evaluation above after I have further refined the model development process
@@ -157,7 +159,7 @@ def objective(params):
     else:
         return 0
     # Calculate model accuracy
-    accuracy = cross_val_score(clf, X_train, y_train, cv=10).mean()
+    accuracy = cross_val_score(clf, X_train, y_train, cv=10).mean() # TODO good cv value?
 
     #  Track the best accuracy per model type
     if accuracy > best_accuracies[classifier_type]:
@@ -252,12 +254,26 @@ with mlflow.start_run(): #TODO need to find examples of this being done - unsure
     if classifier_type == 'svm':
         best_model = SVC(**best_params)
     elif classifier_type == 'rf':
+        # Convert parameters that must be integers (hyperopt returns floats)
+        best_params['n_estimators'] = int(best_params['n_estimators'])
+        best_params['max_depth'] = int(best_params['max_depth'])
+        best_params['min_samples_split'] = int(best_params['min_samples_split'])
+        best_params['min_samples_leaf'] = int(best_params['min_samples_leaf'])
         best_model = RandomForestClassifier(**best_params)
     elif classifier_type == 'logreg':
         best_model = LogisticRegression(**best_params)
     elif classifier_type == 'xgb':
+        # Convert parameters that must be integers (hyperopt returns floats)
+        best_params['max_depth'] = int(best_params['max_depth'])
+        best_params['min_child_weight'] = int(best_params['min_child_weight'])
+        best_params['n_estimators'] = int(best_params['n_estimators'])
         best_model = XGBClassifier(**best_params)
     elif classifier_type == 'gb':
+        # Convert parameters that must be integers (hyperopt returns floats)
+        best_params['n_estimators'] = int(best_params['n_estimators'])
+        best_params['max_depth'] = int(best_params['max_depth'])
+        best_params['min_samples_split'] = int(best_params['min_samples_split'])
+        best_params['min_samples_leaf'] = int(best_params['min_samples_leaf'])
         best_model = GradientBoostingClassifier(**best_params)
 
     # Train on full training data
@@ -289,3 +305,9 @@ with mlflow.start_run(): #TODO need to find examples of this being done - unsure
 # IMPROVE: Early stopping isn't implemented at all because it would work for some and not others so is more complicated to implement
 #  Could also do an ensemble model approach for the final training, and stacking/voting
 #  Examine errors to see if I can identify where I'm making mistakes
+#  More elegant way to handle hyperopt returning floats?
+
+# todo still need to go over best one and see what they do
+
+# IMPROVE: Do feature selection (aside from the manual exclusion I did) using sklearn's Pipeline function and the FS method
+#  of choice to do so within cross-validation folds
